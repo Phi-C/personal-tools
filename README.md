@@ -8,5 +8,6 @@
 |将每个进程的输出保存到各自的log里| `multi_proc_dump.py`: `multi_proc_dump`|
 |记录每个code block花费的时间|`timer_context.py`: `TimerContext`|
 |精度对比工具|`precision_checker.py`:`PrecisionChecker`|
+|获取模型运行的trace graph|在非GPU或者非pytorch框架下, 如果没有类似`nsight system`或者`torch.profiler`的工具可以使用时, 可以考虑使用scalopus进行分析|
 
 
