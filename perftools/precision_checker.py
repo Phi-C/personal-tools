@@ -136,29 +136,43 @@ class PrecisionChecker:
         """Calculate ULP error difference between two tensors."""    
         if observed.dtype != standard.dtype:
             raise TypeError("Input types must match.")
-
+    
         dtype = observed.dtype
         if dtype in {torch.half, torch.bfloat16, torch.float32, torch.double}:
             machine_eps = torch.finfo(dtype).eps
         else:
             raise TypeError(f"Unsupported data type: {dtype}")
         
-        EXP_BIAS = {
-            torch.half: 15,
-            torch.bfloat16: 127,
-            torch.float32: 127,
-            torch.double: 1023,
-        }
-
+        # EXP_BIAS = {
+        #     torch.half: 15,
+        #     torch.bfloat16: 127,
+        #     torch.float32: 127,
+        #     torch.double: 1023,
+        # }
+    
         abs_error = torch.abs(observed - standard)
-        abs_standard = torch.abs(standard)
-        exp_number = torch.where(abs_standard == 0,
-                                torch.zeros_like(abs_standard, dtype=torch.float),
-                                torch.floor(torch.log2(abs_standard)))
-        exp_number = torch.maximum(exp_number, torch.ones_like(exp_number) * (1 - EXP_BIAS[dtype]))
-        ulp_errors = abs_error / machine_eps * torch.pow(2, exp_number)
-
-        return torch.max(ulp_errors).item(), torch.mean(ulp_errors).item()
+        
+        # 处理参考值
+        ref = standard.clone()
+        
+        zero_mask = (ref == 0)
+        if zero_mask.any():
+            smallest_positive = torch.nextafter(ref[zero_mask], torch.tensor(float('inf'), device=ref.device))
+            ref[zero_mask] = smallest_positive
+            
+        inf_mask = torch.isinf(ref)
+        if inf_mask.any():
+            ref[inf_mask] = torch.finfo(dtype).max
+        
+        # 计算
+        exponents = torch.floor(torch.log2(torch.abs(ref)))
+        ulp_standard = torch.pow(2.0, exponents) * machine_eps
+        ulp_error = torch.where(ulp_standard > 0, abs_error / ulp_standard, torch.zeros_like(abs_error))
+        
+        # 处理NaN和InF的情况
+        ulp_error = torch.where(torch.isnan(ulp_error), torch.tensor(float('inf'), device=ulp_error.device), ulp_error)
+        
+        return torch.max(ulp_error).item(), torch.mean(ulp_error).item()
     
     @staticmethod
     def _save_plot(data: List[float], xlabel: str, ylabel: str, title: str, filename: str):
